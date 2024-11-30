@@ -1,3 +1,4 @@
+#include<sqlite3.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<sys/socket.h>
@@ -8,8 +9,46 @@
 #include <unistd.h> // for close
 #include<pthread.h>
 
+int check_user(const char* name_db,const char* username,const char* pwd){
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    int o = sqlite3_open(name_db, &db);
+    
+    if(o != SQLITE_OK) {
+        printf("Błąd połączenia z bazą danych: %s\n", sqlite3_errmsg(db));
+        return 0;
+    }
+
+    char *sql = "SELECT * FROM USERS WHERE username = ? AND password = ?";
+    o = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+    if(o != SQLITE_OK) {
+        printf("Błąd przygotowania zapytania: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return 0;
+    }
+
+    sqlite3_bind_text(stmt, 1, username, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, pwd, -1, SQLITE_STATIC);
+
+    o = sqlite3_step(stmt);
+    
+    if(o == SQLITE_ROW) {
+        printf("Znaleziono użytkownika: %s\n", username);
+        sqlite3_finalize(stmt);
+        sqlite3_close(db);
+        return 1;  
+    } else {
+        printf("Nie znaleziono użytkownika: %s\n", username);
+        sqlite3_finalize(stmt);
+        sqlite3_close(db);
+        return 0; 
+    }
+}
 char client_message[2000];
 char buffer[1024];
+char username[30];
+char password[30];
+char ok[2]="ok";
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 void * socketThread(void *arg)
@@ -18,11 +57,27 @@ void * socketThread(void *arg)
   int newSocket = *((int *)arg);
   int n;
   for(;;){
+    // sleep(20);
     n=recv(newSocket , client_message , 2000 , 0);
     printf("%s\n",client_message);
         if(n<1){
             break;
         }
+        if (sscanf(client_message,"LOG;%30[^;];%30[^;]",username,password)==2){
+            printf("%s\n",username);
+            printf("%s\n",password);
+            int result = check_user("database.db", username, password);
+            if (result==1){
+                printf("zalogowałes sie");
+                //zrobic send, i rcv u klienta i wtedy okienko sie zamyka wiec w signup tez to poprawic
+                //zrobie to jutro mati 
+            }
+            else{
+                printf("dupa");
+            }
+
+        }
+        printf("dziala");
 
     char *message = malloc(sizeof(client_message));
     strcpy(message,client_message);
