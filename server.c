@@ -234,6 +234,198 @@ int add_friend(const char* name_db,const char* username1,const char* username2){
     }
 }
 
+int add_message(const char* db_name, const char* sender, const char* receiver, const char* message) {
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    int o = sqlite3_open(db_name, &db);
+    
+    if (o != SQLITE_OK) {
+        printf("Błąd połączenia z bazą danych: %s\n", sqlite3_errmsg(db));
+        return 0;
+    }
+
+    const char *sql = "INSERT INTO MESSAGES (sender, receiver, message) VALUES (?, ?, ?)";
+    o = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+    
+    if (o != SQLITE_OK) {
+        printf("Błąd przygotowania zapytania: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return 0;
+    }
+
+    sqlite3_bind_text(stmt, 1, sender, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, receiver, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, message, -1, SQLITE_STATIC);
+    
+    o = sqlite3_step(stmt);
+    if (o == SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        sqlite3_close(db);
+        return 1;
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
+
+int create_group(const char* db_name, const char* group_name) {
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    int o = sqlite3_open(db_name, &db);
+
+    if (o != SQLITE_OK) {
+        printf("Błąd połączenia z bazą danych: %s\n", sqlite3_errmsg(db));
+        return 0;
+    }
+
+    const char *sql = "INSERT INTO GROUPS (group_name) VALUES (?)";
+    o = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+    
+    if (o != SQLITE_OK) {
+        printf("Błąd przygotowania zapytania: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return 0;
+    }
+
+    sqlite3_bind_text(stmt, 1, group_name, -1, SQLITE_STATIC);
+    
+    o = sqlite3_step(stmt);
+    if (o == SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        sqlite3_close(db);
+        return 1;
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
+
+int add_member_to_group(const char* db_name, const char* group_name, const char* username) {
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    int o = sqlite3_open(db_name, &db);
+
+    if (o != SQLITE_OK) {
+        printf("Błąd połączenia z bazą danych: %s\n", sqlite3_errmsg(db));
+        return 0;
+    }
+
+    // Znalezienie ID grupy po nazwie
+    const char *group_sql = "SELECT id FROM GROUPS WHERE group_name = ?";
+    o = sqlite3_prepare_v2(db, group_sql, -1, &stmt, 0);
+
+    if (o != SQLITE_OK) {
+        printf("Błąd przygotowania zapytania: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return 0;
+    }
+
+    sqlite3_bind_text(stmt, 1, group_name, -1, SQLITE_STATIC);
+    
+    int group_id = -1;
+    o = sqlite3_step(stmt);
+    if (o == SQLITE_ROW) {
+        group_id = sqlite3_column_int(stmt, 0);
+    }
+    
+    sqlite3_finalize(stmt);
+
+    if (group_id == -1) {
+        printf("Nie znaleziono grupy o nazwie: %s\n", group_name);
+        sqlite3_close(db);
+        return 0;
+    }
+
+    // Dodanie użytkownika do grupy
+    const char *insert_sql = "INSERT INTO GROUP_MEMBERS (group_id, username) VALUES (?, ?)";
+    o = sqlite3_prepare_v2(db, insert_sql, -1, &stmt, 0);
+    
+    if (o != SQLITE_OK) {
+        printf("Błąd przygotowania zapytania: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return 0;
+    }
+
+    sqlite3_bind_int(stmt, 1, group_id);
+    sqlite3_bind_text(stmt, 2, username, -1, SQLITE_STATIC);
+
+    o = sqlite3_step(stmt);
+    if (o == SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        sqlite3_close(db);
+        return 1;
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
+
+int send_group_message(const char* db_name, const char* group_name, const char* sender, const char* message) {
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    int o = sqlite3_open(db_name, &db);
+
+    if (o != SQLITE_OK) {
+        printf("Błąd połączenia z bazą danych: %s\n", sqlite3_errmsg(db));
+        return 0;
+    }
+
+    // Znalezienie ID grupy po nazwie
+    const char *group_sql = "SELECT id FROM GROUPS WHERE group_name = ?";
+    o = sqlite3_prepare_v2(db, group_sql, -1, &stmt, 0);
+
+    if (o != SQLITE_OK) {
+        printf("Błąd przygotowania zapytania: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return 0;
+    }
+
+    sqlite3_bind_text(stmt, 1, group_name, -1, SQLITE_STATIC);
+    
+    int group_id = -1;
+    o = sqlite3_step(stmt);
+    if (o == SQLITE_ROW) {
+        group_id = sqlite3_column_int(stmt, 0);
+    }
+    
+    sqlite3_finalize(stmt);
+
+    if (group_id == -1) {
+        printf("Nie znaleziono grupy o nazwie: %s\n", group_name);
+        sqlite3_close(db);
+        return 0;
+    }
+
+    // Wysłanie wiadomości do grupy
+    const char *insert_sql = "INSERT INTO GROUP_MESSAGES (group_id, sender, message) VALUES (?, ?, ?)";
+    o = sqlite3_prepare_v2(db, insert_sql, -1, &stmt, 0);
+    
+    if (o != SQLITE_OK) {
+        printf("Błąd przygotowania zapytania: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return 0;
+    }
+
+    sqlite3_bind_int(stmt, 1, group_id);
+    sqlite3_bind_text(stmt, 2, sender, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, message, -1, SQLITE_STATIC);
+
+    o = sqlite3_step(stmt);
+    if (o == SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        sqlite3_close(db);
+        return 1;
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
+
+
 char client_message[2000];
 char buffer[1024];
 
