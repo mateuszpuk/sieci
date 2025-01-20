@@ -164,6 +164,21 @@ def get_group_message_history(client_socket, group_name):
     messages = receive_group_messages(client_socket, group_name)
     return messages if messages else []
 
+def get_user_groups(client_socket, username):
+    if client_socket:
+        request = f"GET_USER_GROUPS;{username}\n"
+        client_socket.send(request.encode())
+        response = client_socket.recv(2048).decode()
+        print(f"Odebrano listę grup: {repr(response)}")
+
+        try:
+            groups_data = json.loads(response)
+            if 'groups' in groups_data:
+                return groups_data['groups']
+        except json.JSONDecodeError:
+            print("Błąd dekodowania listy grup.")
+    return []
+
 if __name__ == '__main__':
     clients = connection()
     print(get_group_message_history(clients, 'Group 1'))

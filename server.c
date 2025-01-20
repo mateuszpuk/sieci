@@ -362,6 +362,49 @@ int add_member_to_group(const char* db_name, const char* group_name, const char*
     sqlite3_close(db);
     return 0;
 }
+char* get_user_groups(const char* db_name, const char* username) {
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    int o = sqlite3_open(db_name, &db);
+
+    if (o != SQLITE_OK) {
+        printf("Database connection error: %s\n", sqlite3_errmsg(db));
+        return NULL;
+    }
+
+    // Query to find groups the user is a member of
+    const char *sql = "SELECT G.group_name FROM GROUPS G "
+                      "JOIN GROUP_MEMBERS GM ON G.id = GM.group_id "
+                      "WHERE GM.username = ?";
+
+    o = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+    if (o != SQLITE_OK) {
+        printf("SQL query preparation error: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return NULL;
+    }
+
+    sqlite3_bind_text(stmt, 1, username, -1, SQLITE_STATIC);
+
+    cJSON *groups_array = cJSON_CreateArray();
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char *group_name = (const char *)sqlite3_column_text(stmt, 0);
+        cJSON_AddItemToArray(groups_array, cJSON_CreateString(group_name));
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddItemToObject(response, "groups", groups_array);
+
+    char *json_string = cJSON_Print(response);
+    cJSON_Delete(response);
+
+    return json_string;
+}
+
 
 int send_group_message(const char* db_name, const char* group_name, const char* sender, const char* message) {
     sqlite3 *db;
@@ -482,6 +525,8 @@ char* get_message_history(const char* db_name, const char* user1, const char* us
 
     return json_string;
 }
+
+
 
 void get_group_message_history(int client_socket, char *group_name) {
     sqlite3 *db;
@@ -732,6 +777,26 @@ bzero(group_name,30);
             {   
                 get_group_message_history(newSocket, group_name);
             }
+
+        else if (sscanf(client_message, "GET_USER_GROUPS;%30[^\n]", username) == 1) 
+{
+    printf("Request to get groups for user: %s\n", username);
+    char *groups_list = get_user_groups("database.db", username);
+
+    if (groups_list != NULL) 
+    {
+        send(newSocket, groups_list, strlen(groups_list), 0);
+        printf("Sent group list: %s\n", groups_list);
+
+        free(groups_list);
+    } 
+    else 
+    {
+        send(newSocket, "{\"groups\":[]}", 12, 0);
+        printf("No groups found for user %s\n", username);
+    }
+}
+
 
     }
 
