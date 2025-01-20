@@ -117,6 +117,7 @@ def chat(user):
         fg="white", command=lambda: add_friend(friends_listbox))
     add_friend_button.pack(fill=tk.X, padx=10, pady=5)
 
+    
     tk.Label(friends_frame, text="Znajomi", font=("Arial", 14, "bold"), bg="#f0f0f0").pack(pady=10)
     friends_listbox = tk.Listbox(friends_frame, font=("Arial", 12), bg="white")
     friends_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -207,9 +208,53 @@ def chat(user):
             client.send_group_message(clients, user, group_name, message)
         else:
             print("Nie wybrano odbiorcy ani grupy.")
+    
+    def create_group():
+        def handle_create():
+            group_name = group_entry.get()
+            if group_name:
+                client.create_group(clients, group_name)
+                groups_listbox.insert(tk.END, group_name)
+                create_window.destroy()
+
+        create_window = tk.Toplevel(chat_window)
+        create_window.title("Utwórz grupę")
+        center_window(create_window, 300, 150)
+
+        tk.Label(create_window, text="Nazwa grupy:", font=("Arial", 12)).pack(pady=10)
+        group_entry = tk.Entry(create_window, font=("Arial", 12))
+        group_entry.pack(pady=5)
+
+        tk.Button(create_window, text="Utwórz", font=("Arial", 12), bg="#0078D7", fg="white", command=handle_create).pack(pady=10)
+    def add_to_group():
+        def handle_add():
+            selected_group = groups_listbox.get(groups_listbox.curselection())
+            user_to_add = user_entry.get()
+            if selected_group and user_to_add:
+                client.add_to_group(clients, user, selected_group, user_to_add)
+                add_window.destroy()
+
+        add_window = tk.Toplevel(chat_window)
+        add_window.title("Dodaj do grupy")
+        center_window(add_window, 300, 150)
+
+        tk.Label(add_window, text="Użytkownik do dodania:", font=("Arial", 12)).pack(pady=10)
+        user_entry = tk.Entry(add_window, font=("Arial", 12))
+        user_entry.pack(pady=5)
+
+        tk.Button(add_window, text="Dodaj", font=("Arial", 12), bg="#0078D7", fg="white", command=handle_add).pack(pady=10)
 
     friends_listbox.bind("<<ListboxSelect>>", select_friend)
     groups_listbox.bind("<<ListboxSelect>>", select_group)
+    create_group_button = tk.Button(
+        button_frame, text="Utwórz grupę", font=("Arial", 12), bg="#0078D7", 
+        fg="white", command=create_group)
+    create_group_button.pack(fill=tk.X, padx=10, pady=5)
+
+    add_to_group_button = tk.Button(
+        button_frame, text="Dodaj do grupy", font=("Arial", 12), bg="#0078D7", 
+        fg="white", command=add_to_group)
+    add_to_group_button.pack(fill=tk.X, padx=10, pady=5)
 
     # Fetch and display the list of friends
     friends_data = client.receive_friends_list(clients)

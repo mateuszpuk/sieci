@@ -36,13 +36,13 @@ def send_message(client_socket, sender, receiver, message):
 
 def recvfromserver(client_socket):
     if client_socket:
-        message = client_socket.recv(1024).decode('utf-8', errors='ignore')
+        message = client_socket.recv(8196).decode('utf-8', errors='ignore')
         print(f"Odebrano wiadomość: {repr(message)}")
         return message.strip()
 def receive_friends_list(client_socket):
     if client_socket:
         # listą znajomych w formacie JSON
-        json_message = client_socket.recv(2048).decode('utf-8') 
+        json_message = client_socket.recv(8196).decode('utf-8') 
         list=[]
         json_message=json_message.strip()
         print(f"Odebrano JSON: {repr(json_message)}")
@@ -75,7 +75,7 @@ def receive_previous_messages(client_socket, username, friend_username):
     client_socket.send(request.encode())
 
     # Receive the response from the server
-    response = client_socket.recv(1024).decode()
+    response = client_socket.recv(8196).decode()
 
     if response.startswith("Brak historii wiadomości"):
         print(response)
@@ -106,7 +106,7 @@ def get_message_history(client_socket, username, target):
 def receive_previous_messages(client_socket, username, friend_username):
     request = f"GET_MESSAGES;{username};{friend_username}\n"
     client_socket.send(request.encode())
-    response = client_socket.recv(1024).decode()
+    response = client_socket.recv(8196).decode()
 
     if response.startswith("Brak historii wiadomości"):
         print(response)
@@ -128,13 +128,13 @@ def create_group(client_socket, group_name):
 
 def add_to_group(client_socket, user, group_name, friend):
     if client_socket:
-        message = f"ADD_TO_GROUP;{user};{group_name};{friend}\n"
+        message = f"ADD_TO_GROUP;{friend};{group_name}\n"
         client_socket.send(message.encode())
         print(f"Użytkownik {friend} dodany do grupy {group_name}.")
 
 def send_group_message(client_socket, sender, group_name, message):
     if client_socket:
-        formatted_message = f"GMSG;{sender};{group_name};{message}\n"
+        formatted_message = f"GROUP_MSG;{sender};{group_name};{message}\n"
         client_socket.send(formatted_message.encode())  
         print(f"Wiadomość wysłana do grupy {group_name}: {message}")
 
@@ -143,7 +143,7 @@ def receive_group_messages(client_socket, group_name):
         message = f"GET_GROUP_MESSAGES;{group_name}\n"
         client_socket.send(message.encode())
         
-        response = client_socket.recv(1024).decode()
+        response = client_socket.recv(8196).decode()
         print(response)
         if response.startswith("Brak historii wiadomości"):
             print(response)
@@ -168,7 +168,7 @@ def get_user_groups(client_socket, username):
     if client_socket:
         request = f"GET_USER_GROUPS;{username}\n"
         client_socket.send(request.encode())
-        response = client_socket.recv(2048).decode()
+        response = client_socket.recv(8196).decode()
         print(f"Odebrano listę grup: {repr(response)}")
 
         try:
@@ -180,5 +180,4 @@ def get_user_groups(client_socket, username):
     return []
 
 if __name__ == '__main__':
-    clients = connection()
-    print(get_group_message_history(clients, 'Group 1'))
+    pass

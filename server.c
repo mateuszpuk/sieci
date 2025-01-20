@@ -741,7 +741,7 @@ bzero(group_name,30);
             int result = send_group_message("database.db", group_name, username, buffer);
             if (result == 1)
             {
-                send(newSocket, ok, sizeof(ok), 0);
+                send(newSocket, buffer, sizeof(buffer), 0);
                 printf("Sent group message: %s\n", buffer);
             }
             else
