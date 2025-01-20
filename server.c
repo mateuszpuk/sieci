@@ -244,7 +244,7 @@ int add_message(const char* db_name, const char* sender, const char* receiver, c
         return 0;
     }
 
-    const char *sql = "INSERT INTO MESSAGES (sender, receiver, message) VALUES (?, ?, ?)";
+    const char *sql = "INSERT INTO MESSAGES (sender_username, receiver_username, message) VALUES (?, ?, ?)";
     o = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
     
     if (o != SQLITE_OK) {
@@ -425,6 +425,65 @@ int send_group_message(const char* db_name, const char* group_name, const char* 
     return 0;
 }
 
+char* get_message_history(const char* db_name, const char* user1, const char* user2) {
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    int o = sqlite3_open(db_name, &db);
+    
+    if (o != SQLITE_OK) {
+        printf("Błąd połączenia z bazą danych: %s\n", sqlite3_errmsg(db));
+        return NULL;
+    }
+
+    // SQL query to retrieve all messages exchanged between user1 and user2
+    const char *sql = "SELECT sender_username, receiver_username, message FROM MESSAGES WHERE (sender_username = ? AND receiver_username = ?) OR (sender_username = ? AND receiver_username = ?) ORDER BY timestamp ASC";
+    
+    o = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+    
+    if (o != SQLITE_OK) {
+        printf("Błąd przygotowania zapytania: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return NULL;
+    }
+
+    sqlite3_bind_text(stmt, 1, user1, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, user2, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, user2, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, user1, -1, SQLITE_STATIC);
+
+    // Create JSON object to store the message history
+    cJSON *messages_array = cJSON_CreateArray();
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char* sender = (const char*)sqlite3_column_text(stmt, 0);
+        const char* receiver = (const char*)sqlite3_column_text(stmt, 1);
+        const char* message = (const char*)sqlite3_column_text(stmt, 2);
+
+        // Create a JSON object for each message
+        cJSON *message_obj = cJSON_CreateObject();
+        cJSON_AddStringToObject(message_obj, "sender", sender);
+        cJSON_AddStringToObject(message_obj, "receiver", receiver);
+        cJSON_AddStringToObject(message_obj, "message", message);
+
+        // Add the message object to the messages array
+        cJSON_AddItemToArray(messages_array, message_obj);
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    // Create a response object to hold the messages
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddItemToObject(response, "message_history", messages_array);
+
+    // Convert JSON object to string
+    char *json_string = cJSON_Print(response);
+    cJSON_Delete(response); 
+
+    return json_string;
+}
+
+
 
 char client_message[2000];
 char buffer[1024];
@@ -447,7 +506,7 @@ bzero(username1,30);
 bzero(password,30);
   for(;;){
     n=recv(newSocket , client_message , 2000 , 0);
-    printf("%s\n",client_message);
+    printf("client message: %s\n",client_message);
         if(n<1){
             break;
         }
@@ -530,6 +589,51 @@ bzero(password,30);
                     printf("rejestracja ok");}
             }
         }
+        else if (sscanf(client_message, "MSG;%30[^;];%30[^;];%2000[^\n]", username, username1, buffer) == 3) {
+    printf("Request to send message from %s to %s: %s\n", username, username1, buffer);
+
+    // Sprawdzamy, czy użytkownicy są znajomymi
+    if (are_friends("database.db", username, username1) == 1) {
+        // Jeśli są znajomymi, dodajemy wiadomość do bazy
+        int result = add_message("database.db", username, username1, buffer);
+        if (result == 1) {
+            // Jeśli wiadomość została dodana pomyślnie, wysyłamy komunikat "ok"
+            send(newSocket, ok, sizeof(ok), 0);
+            printf("Wysłano wiadomość: %s\n", buffer);
+        } else {
+            // Jeśli wystąpił błąd podczas dodawania wiadomości
+            send(newSocket, "Błąd podczas wysyłania wiadomości.\n", 34, 0);
+            printf("Błąd podczas wysyłania wiadomości.\n");
+            }
+        } else {
+        // Jeśli użytkownicy nie są znajomymi, informujemy klienta
+            send(newSocket, "Nie jesteście znajomymi, nie możesz wysłać wiadomości.\n", 56, 0);
+            printf("Nie wysłano wiadomości: %s i %s nie są znajomymi\n", username, username1);
+        }   
+
+            // Resetujemy bufor
+            memset(client_message, 0, sizeof(client_message));
+        }
+
+
+        else if (sscanf(client_message, "GET_MESSAGES;%30[^;];%30s", username, username1) == 2) {
+    printf("Request for message history between %s and %s\n", username, username1);
+
+    char *message_history = get_message_history("database.db", username, username1);
+    
+    if (message_history != NULL) {
+        // Send the message history back to the client in JSON format
+        send(newSocket, message_history, strlen(message_history), 0);
+        printf("Wysłano historię wiadomości.\n");
+        
+        free(message_history);
+    } else {
+        // If there is no message history or an error occurred
+        send(newSocket, "Brak historii wiadomości.\n", 25, 0);
+        printf("Brak historii wiadomości.\n");
+    }
+}
+
             
 
     

@@ -26,6 +26,14 @@ def send_friend(client_socket, user, friend):
         client_socket.send(message.encode())  
         print("Wiadomość wysłana znajomy.")
 
+def send_message(client_socket, sender, receiver, message):
+    if client_socket:
+        # Prepare the message format: "MSG;sender;receiver;message\n"
+        formatted_message = f"MSG;{sender};{receiver};{message}\n"
+        client_socket.send(formatted_message.encode())  # Send the message
+        print(f"Wiadomość wysłana do {receiver}: {message}")
+
+
 def recvfromserver(client_socket):
     if client_socket:
         message = client_socket.recv(1024).decode('utf-8', errors='ignore')
@@ -60,3 +68,35 @@ def receive_friends_list(client_socket):
                 return None
         except json.JSONDecodeError:
             print("Błąd dekodowania JSON.")
+def receive_previous_messages(client_socket, username, friend_username):
+    
+    # Sending the GET_MESSAGES request to the server
+    request = f"GET_MESSAGES;{username};{friend_username}\n"
+    client_socket.send(request.encode())
+
+    # Receive the response from the server
+    response = client_socket.recv(1024).decode()
+
+    if response.startswith("Brak historii wiadomości"):
+        print(response)
+    else:
+        try:
+            # Try to parse the JSON response
+            message_history = json.loads(response)
+            print(f"Message history between {username} and {friend_username}:")
+
+            # Extract messages from the JSON object
+            messages = message_history.get("message_history", [])
+            return messages
+        except json.JSONDecodeError:
+            print("Błąd dekodowania odpowiedzi od serwera.")
+            print(response)
+
+def get_message_history(client_socket, username, target):
+    messages = receive_previous_messages(client_socket, username, target)
+    return messages if messages else []
+
+if __name__ == '__main__':
+    clients = connection()
+    a = get_message_history(clients,'user2', 'user1')
+    print(a)

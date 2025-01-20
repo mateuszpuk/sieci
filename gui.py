@@ -34,7 +34,6 @@ def signin(clients):
         if not user or not pwd:
             messagebox.showerror("Błąd", "Proszę wprowadzić nazwę użytkownika i hasło.",parent=si_window)
             return
-        print(f"{user} i {pwd}")
         
         #wysylanie do serwera by sprawdzic czy taki uzytkownik istnieje 
         client.send_logindata(clients, user,pwd)
@@ -132,7 +131,34 @@ def chat(user):
         friends_frame, text="Wyloguj się", font=("Arial", 12), bg="#0078D7", fg="white",
         command=lambda: chat_window.destroy())
     logout_button.pack(side=tk.BOTTOM, pady=10)
+    # Obsługa wyboru znajomego
+    def friend_select(event):
+        
+        selected_friend = friends_listbox.get(friends_listbox.curselection())
+        chat_label.config(text=f"Chat z: {selected_friend}")
+        chat_history.config(state=tk.NORMAL)
+        chat_history.delete(1.0, tk.END)  # Czyść poprzedni chat
+        messages = client.get_message_history(clients,user,selected_friend)
+        if messages:
+            selected_friend = friends_listbox.get(friends_listbox.curselection())
+            for message in messages:
+                # Display the previous messages in the chat history
+                chat_history.insert(tk.END, f"{message['sender']}: {message['message']}\n")
+        else:
+            chat_history.insert(tk.END, "Brak historii wiadomości.\n")
 
+        chat_history.config(state=tk.DISABLED)
+    
+    def send_message():
+        message = chat_entry.get()
+        selected_friend = friends_listbox.get(friends_listbox.curselection())
+        if message:
+            chat_history.config(state=tk.NORMAL)
+            chat_history.insert(tk.END, f"Ty: {message}\n")
+            chat_history.config(state=tk.DISABLED)
+            chat_entry.delete(0, tk.END)
+            client.send_message(clients, user, selected_friend, message)
+    
     # Sekcja czatu (po prawej)
     chat_frame = tk.Frame(main_frame, bg="white")
     chat_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
@@ -146,24 +172,10 @@ def chat(user):
     chat_entry = tk.Entry(chat_frame, font=("Arial", 12))
     chat_entry.pack(fill=tk.X, padx=10, pady=5)
     
-    def send_message():
-        message = chat_entry.get()
-        if message:
-            chat_history.config(state=tk.NORMAL)
-            chat_history.insert(tk.END, f"Ty: {message}\n")
-            chat_history.config(state=tk.DISABLED)
-            chat_entry.delete(0, tk.END)
-
     send_button = tk.Button(chat_frame, text="Wyślij", font=("Arial", 12), bg="#0078D7", fg="white", command=send_message)
     send_button.pack(pady=5)
 
-    # Obsługa wyboru znajomego
-    def friend_select(event):
-        selected_friend = friends_listbox.get(friends_listbox.curselection())
-        chat_label.config(text=f"Chat z: {selected_friend}")
-        chat_history.config(state=tk.NORMAL)
-        chat_history.delete(1.0, tk.END)  # Czyść poprzedni chat
-        chat_history.config(state=tk.DISABLED)
+    
 
     friends_listbox.bind("<<ListboxSelect>>", friend_select)
     friends_data = client.receive_friends_list(clients)  
@@ -233,4 +245,3 @@ def main():
 if __name__=="__main__":
     clients = client.connection()
     main()
-
