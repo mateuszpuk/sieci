@@ -400,7 +400,7 @@ int send_group_message(const char* db_name, const char* group_name, const char* 
     }
 
     // Wysłanie wiadomości do grupy
-    const char *insert_sql = "INSERT INTO GROUP_MESSAGES (group_id, sender, message) VALUES (?, ?, ?)";
+    const char *insert_sql = "INSERT INTO GROUP_MESSAGES (group_id, sender_username, message) VALUES (?, ?, ?)";
     o = sqlite3_prepare_v2(db, insert_sql, -1, &stmt, 0);
     
     if (o != SQLITE_OK) {
@@ -483,6 +483,46 @@ char* get_message_history(const char* db_name, const char* user1, const char* us
     return json_string;
 }
 
+void get_group_message_history(int client_socket, char *group_name) {
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    char *query = "SELECT sender_username, message, timestamp FROM GROUP_MESSAGES WHERE group_id = (SELECT id FROM GROUPS WHERE group_name = ?)";
+    char response[1024] = "{\"message_history\":[";
+
+    if (sqlite3_open("database.db", &db) == SQLITE_OK) {
+        if (sqlite3_prepare_v2(db, query, -1, &stmt, NULL) == SQLITE_OK) {
+            sqlite3_bind_text(stmt, 1, group_name, -1, SQLITE_STATIC);
+
+            int first = 1;
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                if (!first) {
+                    strcat(response, ",");
+                }
+                char sender[50], message[256], timestamp[50];
+                snprintf(sender, sizeof(sender), "%s", sqlite3_column_text(stmt, 0));
+                snprintf(message, sizeof(message), "%s", sqlite3_column_text(stmt, 1));
+                snprintf(timestamp, sizeof(timestamp), "%s", sqlite3_column_text(stmt, 2));
+
+                char temp[512];
+                snprintf(temp, sizeof(temp), "{\"sender\":\"%s\", \"message\":\"%s\", \"timestamp\":\"%s\"}", sender, message, timestamp);
+                strcat(response, temp);
+                first = 0;
+            }
+            strcat(response, "]}");
+
+            sqlite3_finalize(stmt);
+        } else {
+            strcpy(response, "Błąd podczas przygotowania zapytania");
+        }
+        sqlite3_close(db);
+    } else {
+        strcpy(response, "Błąd połączenia z bazą danych");
+    }
+
+    // Send response back to client
+    send(client_socket, response, strlen(response), 0);
+}
+
 
 
 char client_message[2000];
@@ -501,12 +541,14 @@ void * socketThread(void *arg)
   char username[30];
 char password[30];
 char username1[30];
+char group_name[30];
 bzero(username,30);
 bzero(username1,30);
 bzero(password,30);
+bzero(group_name,30);
   for(;;){
     n=recv(newSocket , client_message , 2000 , 0);
-    printf("client message: %s\n",client_message);
+    printf("client message: '%s'\n",client_message);
         if(n<1){
             break;
         }
@@ -615,30 +657,90 @@ bzero(password,30);
             memset(client_message, 0, sizeof(client_message));
         }
 
-
-        else if (sscanf(client_message, "GET_MESSAGES;%30[^;];%30s", username, username1) == 2) {
-    printf("Request for message history between %s and %s\n", username, username1);
-
-    char *message_history = get_message_history("database.db", username, username1);
-    
-    if (message_history != NULL) {
-        // Send the message history back to the client in JSON format
-        send(newSocket, message_history, strlen(message_history), 0);
-        printf("Wysłano historię wiadomości.\n");
+                else if (sscanf(client_message, "CREATE_GROUP;%30[^\n]", group_name) == 1)
+        {
+            printf("Creating group: %s\n", group_name);
+            if (create_group("database.db", group_name) == 1)
+            {
+                send(newSocket, "Group created successfully.\n", 26, 0);
+                printf("Sent message: Group created successfully.\n");
+            }
+            else
+            {
+                send(newSocket, "Error creating group.\n", 23, 0);
+                printf("Error creating group.\n");
+            }
+        }
         
-        free(message_history);
-    } else {
-        // If there is no message history or an error occurred
-        send(newSocket, "Brak historii wiadomości.\n", 25, 0);
-        printf("Brak historii wiadomości.\n");
+        // Add user to group
+        else if (sscanf(client_message, "ADD_TO_GROUP;%30[^;];%30s", username, group_name) == 2)
+        {
+            printf("Adding user %s to group %s\n", username, group_name);
+            if (add_member_to_group("database.db", group_name, username) == 1)
+            {
+                send(newSocket, "User added to group.\n", 21, 0);
+                printf("Sent message: User added to group.\n");
+            }
+            else
+            {
+                send(newSocket, "Error adding user to group.\n", 28, 0);
+                printf("Error adding user to group.\n");
+            }
+        }
+        
+        // Send group message
+        else if (sscanf(client_message, "GROUP_MSG;%30[^;];%30[^;];%2000[^\n]", username, group_name, buffer) == 3)
+        {
+            printf("Request to send group message from %s to group %s: %s\n", username, group_name, buffer);
+
+            int result = send_group_message("database.db", group_name, username, buffer);
+            if (result == 1)
+            {
+                send(newSocket, ok, sizeof(ok), 0);
+                printf("Sent group message: %s\n", buffer);
+            }
+            else
+            {
+                send(newSocket, "Error sending group message.\n", 28, 0);
+                printf("Error sending group message.\n");
+            }
+
+            memset(client_message, 0, sizeof(client_message));
+        }
+        
+        // Get message history
+        else if (sscanf(client_message, "GET_MESSAGES;%30[^;];%30s", username, username1) == 2)
+        {
+            printf("Request for message history between %s and %s\n", username, username1);
+
+            char *message_history = get_message_history("database.db", username, username1);
+            if (message_history != NULL)
+            {
+                send(newSocket, message_history, strlen(message_history), 0);
+                printf("Sent message history.\n");
+
+                free(message_history);
+            }
+            else
+            {
+                send(newSocket, "No message history.\n", 20, 0);
+                printf("No message history.\n");
+            }
+        }
+        
+        else if (sscanf(client_message, "GET_GROUP_MESSAGES;%30[^\n]", group_name) == 1) 
+            {   
+                get_group_message_history(newSocket, group_name);
+            }
+
     }
-}
+
 
             
 
     
 
-    }
+    
     printf("Exit socketThread \n");
 
     pthread_exit(NULL);
