@@ -144,7 +144,6 @@ def chat(user):
     send_button = tk.Button(chat_frame, text="Wyślij", font=("Arial", 12), bg="#0078D7", fg="white", command=lambda: send_message_or_group())
     send_button.pack(pady=5)
 
-    # Select a friend from the list and load the chat history
     def select_friend(event):
         try:
             selected_friend = friends_listbox.get(friends_listbox.curselection())
@@ -161,7 +160,6 @@ def chat(user):
         except tk.TclError:
             print("No friend selected")
 
-    # Select a group and load the group chat history
     def select_group(event):
         try:
             selected_group = groups_listbox.get(groups_listbox.curselection())
@@ -180,13 +178,11 @@ def chat(user):
         except tk.TclError:
             print("No group selected")
 
-    # Handle sending messages to either a friend or a group
     def send_message_or_group():
         message = chat_entry.get()
         if not message:
             return
 
-        # Check if a friend or group is selected
         selected_friend = friends_listbox.curselection()
         selected_group = groups_listbox.curselection()
 
